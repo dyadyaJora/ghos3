@@ -23,8 +23,8 @@ describe('S3Storage', () => {
 
   it('should save an image to S3', async () => {
     // Create a test image file or use an existing one
-    const imageName = 'test-image.png'; // Adjust the image name
-    const testImagePath = path.join(__dirname, 'test-image.png'); // Adjust the path to your test image
+    const imageName = 'test-image_o.png'; // Adjust the image name
+    const testImagePath = path.join(__dirname, 'test-image_o.png'); // Adjust the path to your test image
     const image: Image = {
       path: testImagePath,
       name: imageName,

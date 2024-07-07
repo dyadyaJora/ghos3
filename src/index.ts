@@ -6,9 +6,13 @@ import {
 } from '@aws-sdk/client-s3'
 import StorageBase, { type ReadOptions, type Image } from 'ghost-storage-base'
 import { join } from 'path'
-import { createReadStream } from 'fs'
+import { createReadStream, readFileSync, writeFileSync } from 'fs'
 import type { Readable } from 'stream'
 import type { Handler } from 'express'
+import imageTransform from '@tryghost/image-transform';
+
+const THEME_PATH = process.env.THEME_PATH || 'current/core/frontend/services/themes/active/package.json';
+const activeTheme = require(join(process.cwd(), THEME_PATH));
 
 const stripLeadingSlash = (s: string) =>
   s.indexOf('/') === 0 ? s.substring(1) : s
@@ -28,6 +32,15 @@ type Config = {
   endpoint?: string
   forcePathStyle?: boolean
   acl?: string
+}
+
+interface ImageSize {
+  width?: number;
+  height?: number;
+}
+
+interface ImageSizes {
+  [key: string]: ImageSize;
 }
 
 class S3Storage extends StorageBase {
@@ -158,19 +171,49 @@ class S3Storage extends StorageBase {
 
     const fileName = await this.getUniqueFileName(image, directory)
     const file = createReadStream(image.path)
+    const fileFormat = image.path.split('.').pop();
+    const targetFilename = image.path.split('/').pop().split('.').slice(0, -1).join('.');
+    const isOriginalImage = targetFilename.endsWith('_o');
 
+    if (isOriginalImage && activeTheme && activeTheme.config && activeTheme.config.image_sizes && imageTransform.canTransformToFormat(fileFormat)) {
+      const imageSizes: ImageSizes = activeTheme.config.image_sizes;
+      // Compute image dimensions
+      const imageDimensions = Object.keys(imageSizes).reduce<{ [key: string]: ImageSize }>((dimensions, size) => {
+        const { width, height } = imageSizes[size];
+        const dimension = (width ? 'w' + width : '') + (height ? 'h' + height : '');
+        return Object.assign({
+            [dimension]: imageSizes[size]
+        }, dimensions);
+      }, {});
+
+      const data = readFileSync(image.path);
+      const resizePromises = Object.keys(imageDimensions).map(async (imageDimension) => {
+        const transformed = await imageTransform.resizeFromBuffer(data, {
+          ...imageDimensions[imageDimension],
+          format: fileFormat
+        });
+        await this.uploadFile(transformed, `/size/${imageDimension}/${fileName}`, image.type);
+      });
+
+      await Promise.all(resizePromises);
+    }
+
+    await this.uploadFile(file, fileName, image.type);
+    return `${this.host}/${fileName}`
+  }
+
+  private async uploadFile(file: Readable | Buffer, fileName: string, contentType: string) {
     let config: PutObjectCommandInput = {
       ACL: this.acl,
       Body: file,
       Bucket: this.bucket,
       CacheControl: `max-age=${30 * 24 * 60 * 60}`,
-      ContentType: image.type,
+      ContentType: contentType,
       Key: stripLeadingSlash(normalizePath(fileName)),
     }
     await this.s3().putObject(config)
-
-    return `${this.host}/${fileName}`
   }
+
 
   serve(): Handler {
     return async (req, res, next) => {
