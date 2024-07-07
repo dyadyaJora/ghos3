@@ -171,8 +171,8 @@ class S3Storage extends StorageBase {
 
     const fileName = await this.getUniqueFileName(image, directory)
     const file = createReadStream(image.path)
-    const fileFormat = image.path.split('.').pop();
-    const targetFilename = image.path.split('/').pop().split('.').slice(0, -1).join('.');
+    const fileFormat = image.name.split('.').pop();
+    const targetFilename = image.name.split('/').pop().split('.').slice(0, -1).join('.');
     const isOriginalImage = targetFilename.endsWith('_o');
 
     if (isOriginalImage && activeTheme && activeTheme.config && activeTheme.config.image_sizes && imageTransform.canTransformToFormat(fileFormat)) {
