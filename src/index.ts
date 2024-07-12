@@ -187,13 +187,13 @@ class S3Storage extends StorageBase {
       }, {});
 
       const data = readFileSync(image.path);
-      const resizePromises = Object.keys(imageDimensions).map(async (imageDimension) => {
-        const transformed = await imageTransform.resizeFromBuffer(data, {
+      const resizePromises = Object.keys(imageDimensions).map((imageDimension) => {
+        const transformed = imageTransform.resizeFromBuffer(data, {
           ...imageDimensions[imageDimension],
           format: fileFormat
         });
         const awsFileName = normalizePath(join(stripEndingSlash(this.pathPrefix), stripEndingSlash(directory), `/size/${imageDimension}/${fileName}`));
-        await this.uploadFile(transformed, awsFileName, image.type);
+        return this.uploadFile(transformed, awsFileName, image.type);
       });
 
       await Promise.all(resizePromises);
