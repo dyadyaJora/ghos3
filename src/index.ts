@@ -167,15 +167,15 @@ class S3Storage extends StorageBase {
   }
 
   async save(image: Image, targetDir?: string) {
-    const directory = targetDir || this.getTargetDir(this.pathPrefix)
+    const directory = targetDir || this.getTargetDir("");
 
-    const fileName = await this.getUniqueFileName(image, directory)
+    const fileName = await this.getUniqueFileName(image, "")
     const file = createReadStream(image.path)
     const fileFormat = image.name.split('.').pop();
     const targetFilename = image.name.split('/').pop().split('.').slice(0, -1).join('.');
     const isOriginalImage = targetFilename.endsWith('_o');
 
-    if (isOriginalImage && activeTheme && activeTheme.config && activeTheme.config.image_sizes && imageTransform.canTransformToFormat(fileFormat)) {
+    if (!isOriginalImage && activeTheme && activeTheme.config && activeTheme.config.image_sizes && imageTransform.canTransformToFormat(fileFormat)) {
       const imageSizes: ImageSizes = activeTheme.config.image_sizes;
       // Compute image dimensions
       const imageDimensions = Object.keys(imageSizes).reduce<{ [key: string]: ImageSize }>((dimensions, size) => {
@@ -192,14 +192,17 @@ class S3Storage extends StorageBase {
           ...imageDimensions[imageDimension],
           format: fileFormat
         });
-        await this.uploadFile(transformed, `/size/${imageDimension}/${fileName}`, image.type);
+        const awsFileName = normalizePath(join(stripEndingSlash(this.pathPrefix), stripEndingSlash(directory), `/size/${imageDimension}/${fileName}`));
+        await this.uploadFile(transformed, awsFileName, image.type);
       });
 
       await Promise.all(resizePromises);
     }
 
-    await this.uploadFile(file, fileName, image.type);
-    return `${this.host}/${fileName}`
+    const directoryCommon = targetDir || this.getTargetDir(this.pathPrefix);
+    const awsFileNameCommon = await this.getUniqueFileName(image, directoryCommon);
+    await this.uploadFile(file, awsFileNameCommon, image.type);
+    return `${this.host}/${awsFileNameCommon}`;
   }
 
   private async uploadFile(file: Readable | Buffer, fileName: string, contentType: string) {
